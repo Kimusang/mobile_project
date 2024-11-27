@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Result</title>
+    <style>
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+        .container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            margin-right: 10px;
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Prediction Result</h1>
+        
+        <h3>Input Image</h3>
+        <img src="{{ input_image }}" alt="Input Image" width="500">
+        
+        <h3>Model 1 Result</h3>
+        <img src="{{ result1_image }}" alt="Model 1 Result" width="500">
+        
+        <h3>Model 2 Result</h3>
+        <img src="{{ result2_image }}" alt="Model 2 Result" width="500">
+
+        <br><br>
+
+        <!-- 버튼 영역 -->
+        <div>
+            <!-- 돌아가기 버튼 -->
+            <a href="/showImg" class="btn btn-secondary">Go Back</a>
+
+            <!-- 모델 1 저장 버튼 -->
+            <button id="saveModel1Button" class="btn" onclick="saveResults('model1')">Save Model 1 Results</button>
+
+            <!-- 모델 2 저장 버튼 -->
+            <button id="saveModel2Button" class="btn" onclick="saveResults('model2')">Save Model 2 Results</button>
+        </div>
+    </div>
+
+    <script>
+        function saveResults(model) {
+            const imagePath = "{{ input_image }}";
+            const modelResults = model === 'model1' ? {{ model1_results | tojson }} : {{ model2_results | tojson }};
+        
+            fetch('/value', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image_path: imagePath, model_results: { [model]: modelResults } }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    alert(data.message);
+                } else {
+                    alert("Error saving results");
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("Error occurred while saving results");
+            });
+        }
+    </script>
+</body>
+</html>

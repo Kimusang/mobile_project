@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Search</title>
+</head>
+<body>
+    <h1>Search Image</h1>
+    <form method="POST">
+        <label for="img_name">Image Name:</label>
+        <input type="text" name="img_name" id="img_name" required>
+        <button type="submit">Search</button>
+    </form>
+
+    {% if results is not none %}
+        <h2>Results for "{{ img_name }}"</h2>
+        <table border="1">
+            <tr>
+                <th>Class ID</th>
+                <th>x1</th>
+                <th>y1</th>
+                <th>x2</th>
+                <th>y2</th>
+            </tr>
+            {% for result in results %}
+                <tr>
+                    <td>{{ result.class_id }}</td>
+                    <td>{{ result.x1 }}</td>
+                    <td>{{ result.y1 }}</td>
+                    <td>{{ result.x2 }}</td>
+                    <td>{{ result.y2 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+</body>
+</html>
