@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Search</title>
+</head>
+<body>
+    <h1>Database Search & Visualization</h1>
+
+    <!-- 1단계: 이미지 검색 -->
+    {% if step == 0 or step == 1 %}
+        <form method="POST">
+            <input type="hidden" name="action" value="search">
+            <label for="img_name">Image Name:</label>
+            <input type="text" name="img_name" id="img_name" required value="{{ img_name }}">
+            <button type="submit">Search</button>
+        </form>
+    {% endif %}
+
+    <!-- 검색 결과 출력 -->
+    {% if results %}
+        <h2>Results for "{{ img_name }}"</h2>
+        <table border="1">
+            <tr>
+                <th>Class ID</th>
+                <th>x1</th>
+                <th>y1</th>
+                <th>x2</th>
+                <th>y2</th>
+            </tr>
+            {% for result in results %}
+                <tr>
+                    <td>{{ result.class_id }}</td>
+                    <td>{{ result.x1 }}</td>
+                    <td>{{ result.y1 }}</td>
+                    <td>{{ result.x2 }}</td>
+                    <td>{{ result.y2 }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+
+        <!-- 2단계: 시각화 -->
+        <h2>Visualize Class IDs</h2>
+        <form method="POST">
+            <input type="hidden" name="action" value="visualize">
+            <input type="hidden" name="img_name" value="{{ img_name }}">
+            <label for="class_ids">Class IDs (comma-separated):</label>
+            <input type="text" name="class_ids" id="class_ids" placeholder="e.g., 25,26,27">
+            <button type="submit">Visualize</button>
+        </form>
+    {% endif %}
+
+    <!-- 시각화 결과 출력 -->
+    {% if step == 2 %}
+    <h2>Visualization Results</h2>
+    <div>
+        <h3>Individual Bounding Boxes</h3>
+        <img src="{{ individual_image_url }}" alt="Individual Bounding Boxes" />
+    </div>
+    <div>
+        <h3>Combined Bounding Box (sumbox)</h3>
+        <img src="{{ combined_image_url }}" alt="Combined Bounding Box" />
+    </div>
+    {% endif %}
+
+    <!-- 에러 메시지 -->
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+</body>
+</html>

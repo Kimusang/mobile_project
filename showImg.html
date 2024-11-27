@@ -1,0 +1,9 @@
+<html>
+    <body>
+        <img src="{{url_for('static', filename = '/img/testimg.jpg')}}">
+        <form action="/predict" method="post" enctype="multipart/form-data">
+            <input type="file" name="file" required />
+            <button type="submit">Submit</button>
+        </form>
+    </body>
+</html>

@@ -14,7 +14,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 import matplotlib
 matplotlib.use('Agg')
-
+import cv2
+import numpy as np
 # from apps.crud.models import Prediction
 db = SQLAlchemy()
 migrate = Migrate()
@@ -70,7 +71,6 @@ db.init_app(app)
 migrate.init_app(app, db)
 
     # return app
-
 
 @app.route('/showImg')
 def showImg():
@@ -274,14 +274,121 @@ def value():
 
     return jsonify({"message": "Results saved to database."})
 
+# @app.route('/model1_db', methods=['GET', 'POST'])
+# def model1_db():
+#     if request.method == 'POST':
+#         # POST 요청에서 어떤 단계인지 확인 (Search or Visualize)
+#         action = request.form.get('action')  # "search" 또는 "visualize"
+#         img_name = request.form.get('img_name', '').strip()
+#         class_ids = request.form.get('class_ids', '').strip()
+
+#         if action == 'search':
+#             # 1단계: 이미지 이름으로 DB 검색
+#             results = Prediction1.query.filter(Prediction1.image_path.like(f'%{img_name}%')).all()
+#             if results:
+#                 return render_template(
+#                     'model_db.html', 
+#                     img_name=img_name, 
+#                     results=results,
+#                     step=1  # 1단계 완료 상태
+#                 )
+#             return render_template('model_db.html', error="No results found.", step=0)
+
+#         elif action == 'visualize':
+#             # 2단계: Class ID를 입력받아 시각화
+#             if not img_name:
+#                 return render_template('model_db.html', error="Image name is required.", step=1)
+            
+#             # 이미지 경로 설정
+#             image_path = os.path.join(app.root_path, 'static', 'uploads', img_name)
+#             if not os.path.exists(image_path):
+#                 return render_template('model_db.html', error="Image not found.", step=1)
+
+#             if not class_ids:
+#                 return render_template('model_db.html', error="Class IDs are required.", step=1)
+
+#             try:
+#                 class_ids = list(map(int, class_ids.split(',')))  # 쉼표로 구분된 Class ID를 정수 리스트로 변환
+#                 model_results = inference_detector(model, image_path)
+
+#                 # 시각화
+#                 output_image_path = draw_bboxes_on_image(image_path, model_results, class_ids)
+
+#                 return render_template(
+#                     'model_db.html',
+#                     img_name=img_name,
+#                     results=None,  # DB 결과는 2단계에서 불필요
+#                     image_url=f"/static/{os.path.basename(output_image_path)}",
+#                     step=2  # 2단계 완료 상태
+#                 )
+#             except Exception as e:
+#                 print("Visualization failed:", e)
+#                 return render_template('model_db.html', error="Visualization failed.", step=1)
+
+#     # 기본 GET 요청 (초기 상태)
+#     return render_template('model_db.html', step=0)
+
 @app.route('/model1_db', methods=['GET', 'POST'])
 def model1_db():
     if request.method == 'POST':
-        img_name = request.form['img_name']
-        # Searching for entries where image_path contains the img_name
-        results = Prediction1.query.filter(Prediction1.image_path.like(f'%{img_name}%')).all()
-        return render_template('model_db.html', results=results, img_name=img_name)
-    return render_template('model_db.html', results=None)
+        action = request.form.get('action')
+        img_name = request.form.get('img_name', '').strip()
+        class_ids = request.form.get('class_ids', '').strip()
+
+        if action == 'search':
+            # 이미지 이름으로 DB1 검색
+            results = Prediction1.query.filter(Prediction1.image_path.like(f'%{img_name}%')).all()
+            if results:
+                return render_template(
+                    'model_db.html',
+                    img_name=img_name,
+                    results=results,
+                    step=1
+                )
+            return render_template('model_db.html', error="No results found.", step=0)
+
+        elif action == 'visualize':
+            if not img_name:
+                return render_template('model_db.html', error="Image name is required.", step=1)
+
+            image_path = os.path.join(app.root_path, 'static', 'uploads', img_name)
+            if not os.path.exists(image_path):
+                return render_template('model_db.html', error="Image not found.", step=1)
+
+            if not class_ids:
+                return render_template('model_db.html', error="Class IDs are required.", step=1)
+
+            try:
+                # 모델 추론 수행
+                class_ids = list(map(int, class_ids.split(',')))
+                model_results = inference_detector(model, image_path)
+
+                # 좌표 병합 및 확장
+                expanded_bbox = get_expanded_bbox(model_results, class_ids)
+
+                # 개별 박스를 포함하는 이미지 생성
+                individual_bbox_path = draw_individual_bboxes(image_path, model_results, class_ids)
+
+                # 큰 박스를 포함하는 이미지 생성
+                combined_bbox_path = draw_combined_bbox(image_path, expanded_bbox, "sumbox")
+
+                return render_template(
+                    'model_db.html',
+                    img_name=img_name,
+                    results=None,
+                    individual_image_url=f"/static/visualized/{os.path.basename(individual_bbox_path)}",
+                    combined_image_url=f"/static/visualized/{os.path.basename(combined_bbox_path)}",
+                    step=2
+                )
+            except Exception as e:
+                print("Visualization failed:", e)
+                return render_template('model_db.html', error="Visualization failed.", step=1)
+
+    return render_template('model_db.html', step=0)
+
+
+
+
 
 @app.route('/model2_db', methods=['GET', 'POST'])
 def model2_db():
@@ -313,7 +420,119 @@ def process_results(result):     # 결과 처리 함수
                     })
     return output
 
+def draw_bboxes_on_image(image_path, model_results, class_ids):
+    """주어진 클래스 ID에 따라 이미지를 시각화하고 저장"""
+    output_path = 'static/visualized_image.jpg'
+    image = cv2.imread(image_path)
 
+    # 모델 결과 파싱
+    bbox_result, _ = model_results if isinstance(model_results, tuple) else (model_results, None)
+    
+    for class_id in class_ids:
+        for bbox in bbox_result[class_id]:
+            x1, y1, x2, y2, score = bbox
+            if score >= 0.3:
+                # 박스 그리기
+                cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                # 클래스와 점수 표시
+                cv2.putText(image, f"Class {class_id}: {score:.2f}", 
+                            (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    
+    cv2.imwrite(output_path, image)
+    return output_path
+
+
+def get_expanded_bbox(model_results, class_ids):
+    """지정된 클래스의 좌표를 병합하고 박스를 확장"""
+    bbox_result, _ = model_results if isinstance(model_results, tuple) else (model_results, None)
+
+    # 초기 값 설정 (무한대로 확장 가능)
+    min_x1, min_y1 = float('inf'), float('inf')
+    max_x2, max_y2 = float('-inf'), float('-inf')
+
+    for class_id in class_ids:
+        for bbox in bbox_result[class_id]:
+            x1, y1, x2, y2, score = bbox
+            if score >= 0.3:  # Confidence threshold
+                min_x1 = min(min_x1, x1)
+                min_y1 = min(min_y1, y1)
+                max_x2 = max(max_x2, x2)
+                max_y2 = max(max_y2, y2)
+
+    return (min_x1, min_y1, max_x2, max_y2)
+
+def draw_individual_bboxes(image_path, model_results, class_ids):
+    import cv2
+    import os
+
+    # 이미지 로드
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError(f"Failed to load image from {image_path}")
+
+    # 모델 결과에서 bbox 추출
+    if isinstance(model_results, tuple):
+        bbox_result, _ = model_results
+    else:
+        bbox_result = model_results
+
+    for class_id in class_ids:
+        if class_id >= len(bbox_result):
+            print(f"Warning: Class ID {class_id} is out of range for model results.")
+            continue
+
+        for bbox in bbox_result[class_id]:
+            if len(bbox) == 5:  # [x1, y1, x2, y2, score]
+                x1, y1, x2, y2, score = bbox
+                if score >= 0.3:  # 임계값
+                    # 박스 그리기
+                    cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)  # 초록색
+                    # 레이블 추가
+                    cv2.putText(
+                        image,
+                        f"Class {class_id}: {score:.2f}",
+                        (int(x1), int(y1) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        1
+                    )
+            else:
+                print(f"Unexpected bbox format for Class ID {class_id}: {bbox}")
+
+    # 결과 이미지 저장
+    output_dir = os.path.join(app.root_path, 'static', 'visualized')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"individual_{os.path.basename(image_path)}")
+    cv2.imwrite(output_path, image)
+
+    print(f"Individual bounding boxes saved to {output_path}")
+    return output_path
+
+
+def draw_combined_bbox(image_path, expanded_bbox, label):
+    import cv2
+
+    image = cv2.imread(image_path)
+    x1, y1, x2, y2 = map(int, expanded_bbox)
+
+    # 큰 박스 그리기
+    cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Blue box
+    cv2.putText(
+        image,
+        label,
+        (x1, y1 - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (255, 0, 0),
+        1
+    )
+
+    output_path = os.path.join(app.root_path, 'static', 'visualized', f"combined_{os.path.basename(image_path)}")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    cv2.imwrite(output_path, image)
+
+    return output_path
 
 
 if __name__ == '__main__' :
